@@ -1,0 +1,108 @@
+Crie um sistema web completo em português (Brasil) para controle de presença de instrutores em reuniões.
+O sistema deve ser moderno, responsivo (funcionar bem no celular), intuitivo e rápido para uso durante reuniões.
+🎯 OBJETIVO DO SISTEMA
+Gerenciar presença de instrutores em reuniões que acontecem todas as segundas e sextas-feiras, permitindo:
+Check-in rápido
+Instrutores com múltiplos setores
+Campo opcional de observação/justificativa
+Relatórios completos
+Meta mínima de presença
+Perfil individual detalhado
+Controle de edição
+📅 DATAS DAS PRÓXIMAS 20 REUNIÕES
+As reuniões acontecem sempre:
+Segunda-feira
+Sexta-feira
+Inserir automaticamente as próximas 20 datas futuras no sistema.
+👥 CADASTRO DE INSTRUTORES
+Cada instrutor deve conter:
+Nome completo
+Setor(es) (permitir múltiplos setores)
+Status ativo/inativo
+Um instrutor pode participar de mais de um setor.
+🏢 CADASTRO DE SETORES
+Criar sistema de cadastro de setores:
+Nome do setor
+Instrutores vinculados
+📋 TELA PRINCIPAL – CHECK-IN
+Criar uma tela principal com:
+Filtros:
+Selecionar Data da reunião
+Filtrar por Setor
+Campo de busca por nome
+Exibir lista de instrutores com:
+Nome
+Setores
+Status da presença (selecionável)
+Status possíveis:
+🟢 Presente
+🔴 Ausente
+🟡 Justificado
+⚪ Não Aplicável
+Permitir:
+Campo opcional de observação ao marcar como Justificado
+Edição permitida apenas no dia da reunião
+Após o dia da reunião → bloqueio automático (somente leitura)
+Registrar data e hora da última alteração
+⚡ MODO MARCAÇÃO RÁPIDA
+Adicionar botão:
+“Marcar todos como Presente”
+Depois permitir ajustes individuais.
+📊 RELATÓRIOS GERAIS
+Criar aba de relatórios com:
+Relatório por Instrutor
+Exibir:
+Total de reuniões
+Total de presenças
+Total de faltas
+Total de justificativas
+Total de não aplicáveis
+Percentual de presença geral
+Percentual por setor
+Gráfico mensal de presença
+Ranking Geral
+Tabela com:
+Nome
+Percentual de presença
+Total de presenças
+Total de faltas
+Ordenado do maior percentual para o menor.
+🎯 META MÍNIMA DE PRESENÇA
+Criar campo configurável de meta mínima (exemplo padrão: 80%).
+Regras:
+Destacar em vermelho quem estiver abaixo da meta
+Mostrar indicador visual de alerta
+📈 RELATÓRIO POR DIA DA SEMANA
+Mostrar:
+Média de presença nas segundas-feiras
+Média nas sextas-feiras
+Exibir gráfico comparativo.
+👤 PERFIL INDIVIDUAL DO INSTRUTOR
+Criar página individual contendo:
+Nome
+Setores
+Percentual geral
+Percentual por setor
+Histórico completo de reuniões
+Gráfico de presença mensal
+Total de:
+Presenças
+Faltas
+Justificativas
+Não aplicáveis
+🔐 CONTROLE DE EDIÇÃO
+Regras:
+Pode editar presença apenas no dia da reunião
+Após isso → somente leitura
+Registrar log simples de alteração
+📱 DESIGN
+Interface moderna
+Cores claras
+Indicadores visuais fortes
+Funcionar perfeitamente em celular
+Botões grandes para uso rápido durante reunião
+🧠 FOCO DO SISTEMA
+Velocidade na marcação
+Clareza nos relatórios
+Gestão estratégica de frequência
+Fácil expansão futura
