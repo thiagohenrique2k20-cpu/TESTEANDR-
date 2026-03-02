@@ -27,7 +27,7 @@ export default function CheckIn() {
 
   const [selectedMeetingId, setSelectedMeetingId] = useState<number | "">("");
   const [search, setSearch] = useState("");
-  const [sectorFilter, setSectorFilter] = useState("all");
+  const [sectorFilters, setSectorFilters] = useState<string[]>([]);
   const [draft, setDraft] = useState<Record<number, AttendanceState>>({});
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -39,7 +39,12 @@ export default function CheckIn() {
       if (todayMeeting) {
         setSelectedMeetingId(todayMeeting.id);
       } else {
-        const sorted = [...meetings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // Find closest meeting to today (past or future)
+        const sorted = [...meetings].sort((a, b) => {
+          const distA = Math.abs(new Date(a.date).getTime() - new Date().getTime());
+          const distB = Math.abs(new Date(b.date).getTime() - new Date().getTime());
+          return distA - distB;
+        });
         setSelectedMeetingId(sorted[0].id);
       }
     }
@@ -64,11 +69,7 @@ export default function CheckIn() {
   const updateMutation = useBulkUpdateAttendances(selectedMeetingId as number);
 
   const selectedMeeting = meetings?.find(m => m.id === selectedMeetingId);
-  const isLocked = useMemo(() => {
-    if (!selectedMeeting) return true;
-    const todayStr = format(new Date(), "yyyy-MM-dd");
-    return selectedMeeting.date !== todayStr;
-  }, [selectedMeeting]);
+  const isLocked = false; // Always allow editing as requested
 
   const filteredInstructors = useMemo(() => {
     if (!instructors) return [];
@@ -76,11 +77,18 @@ export default function CheckIn() {
     if (search) {
       list = list.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
     }
-    if (sectorFilter !== "all") {
-      list = list.filter(i => i.sectors.some(s => s.sector.id.toString() === sectorFilter));
+    if (sectorFilters.length > 0) {
+      list = list.filter(i => i.sectors.some(s => sectorFilters.includes(s.sector.id.toString())));
     }
     return list;
-  }, [instructors, search, sectorFilter]);
+  }, [instructors, search, sectorFilters]);
+
+  const toggleSectorFilter = (id: string) => {
+    setSectorFilters(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
 
   const handleStatusChange = (instructorId: number, status: AttendanceState['status']) => {
     if (isLocked) return;
@@ -178,18 +186,29 @@ export default function CheckIn() {
               />
             </div>
 
-            <Select value={sectorFilter} onValueChange={setSectorFilter}>
-              <SelectTrigger className="w-full sm:w-[200px] h-11 rounded-xl bg-background shadow-sm">
-                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Filtrar por setor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os setores</SelectItem>
-                {sectors?.map(s => (
-                  <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              {sectors?.map(s => (
+                <Button
+                  key={s.id}
+                  variant={sectorFilters.includes(s.id.toString()) ? "default" : "outline"}
+                  size="sm"
+                  className="rounded-full h-8 px-3 text-xs"
+                  onClick={() => toggleSectorFilter(s.id.toString())}
+                >
+                  {s.name}
+                </Button>
+              ))}
+              {sectorFilters.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-xs h-8"
+                  onClick={() => setSectorFilters([])}
+                >
+                  Limpar
+                </Button>
+              )}
+            </div>
           </div>
 
           <Button 
@@ -203,16 +222,7 @@ export default function CheckIn() {
           </Button>
         </div>
 
-        {/* Lock Warning */}
-        {isLocked && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <div>
-              <h4 className="font-semibold text-sm">Reunião Bloqueada para Edição</h4>
-              <p className="text-sm opacity-90">O check-in só pode ser alterado no dia exato da reunião. Hoje é {format(new Date(), 'dd/MM/yyyy')}.</p>
-            </div>
-          </div>
-        )}
+        {/* Lock Warning Removed - Editing Always Enabled */}
 
         {/* Instructors List */}
         <div className="grid gap-3">
