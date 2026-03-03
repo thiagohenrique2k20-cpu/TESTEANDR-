@@ -67,6 +67,16 @@ export const api = {
       path: '/api/meetings' as const,
       responses: { 200: z.any() },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/meetings/:id' as const,
+      input: z.object({
+        name: z.string().optional().nullable(),
+        date: z.string().optional(),
+        sectorId: z.number().optional().nullable(),
+      }),
+      responses: { 200: z.any(), 400: errorSchemas.validation, 404: errorSchemas.notFound },
+    },
   },
   attendances: {
     list: {

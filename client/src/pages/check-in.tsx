@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar as CalendarIcon, CheckCircle2, Search, Filter, AlertCircle, Info } from "lucide-react";
+import { Calendar as CalendarIcon, CheckCircle2, Search, Filter, AlertCircle, Info, Edit2 } from "lucide-react";
 import { useInstructors } from "@/hooks/use-instructors";
-import { useMeetings } from "@/hooks/use-meetings";
+import { useMeetings, useUpdateMeeting } from "@/hooks/use-meetings";
 import { useAttendances, useBulkUpdateAttendances } from "@/hooks/use-attendances";
 import { useSectors } from "@/hooks/use-sectors";
 import { PageHeader } from "@/components/layout/page-header";
@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 type AttendanceState = {
   status: "present" | "absent" | "justified" | "na";
@@ -28,8 +30,14 @@ export default function CheckIn() {
   const [selectedMeetingId, setSelectedMeetingId] = useState<number | "">("");
   const [search, setSearch] = useState("");
   const [sectorFilters, setSectorFilters] = useState<string[]>([]);
+  const [meetingSectorFilter, setMeetingSectorFilter] = useState<string>("all");
   const [draft, setDraft] = useState<Record<number, AttendanceState>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [isEditingMeeting, setIsEditingMeeting] = useState(false);
+  const [editMeetingName, setEditMeetingName] = useState("");
+  const [editMeetingSectorId, setEditMeetingSectorId] = useState<number | null>(null);
+
+  const updateMeetingMutation = useUpdateMeeting();
 
   // Sync initial meeting selection
   useEffect(() => {
@@ -50,6 +58,32 @@ export default function CheckIn() {
     }
   }, [meetings, selectedMeetingId]);
 
+  const selectedMeeting = meetings?.find(m => m.id === selectedMeetingId);
+
+  useEffect(() => {
+    if (selectedMeeting) {
+      setEditMeetingName(selectedMeeting.name || "");
+      setEditMeetingSectorId(selectedMeeting.sectorId || null);
+    }
+  }, [selectedMeeting]);
+
+  const filteredMeetings = useMemo(() => {
+    if (!meetings) return [];
+    if (meetingSectorFilter === "all") return meetings;
+    return meetings.filter(m => m.sectorId?.toString() === meetingSectorFilter);
+  }, [meetings, meetingSectorFilter]);
+
+  const handleUpdateMeeting = () => {
+    if (selectedMeetingId === "") return;
+    updateMeetingMutation.mutate({
+      id: Number(selectedMeetingId),
+      name: editMeetingName,
+      sectorId: editMeetingSectorId
+    }, {
+      onSuccess: () => setIsEditingMeeting(false)
+    });
+  };
+
   // Sync draft state from backend attendances when meeting changes
   useEffect(() => {
     if (selectedMeetingId !== "" && attendances) {
@@ -68,7 +102,6 @@ export default function CheckIn() {
 
   const updateMutation = useBulkUpdateAttendances(selectedMeetingId as number);
 
-  const selectedMeeting = meetings?.find(m => m.id === selectedMeetingId);
   const isLocked = false; // Always allow editing as requested
 
   const filteredInstructors = useMemo(() => {
@@ -154,39 +187,84 @@ export default function CheckIn() {
       />
 
       <div className="grid gap-6">
-        {/* Controls Bar */}
-        <div className="bg-card border border-border/50 rounded-2xl p-4 md:p-6 shadow-sm flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
-          <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
-            <div className="relative min-w-[240px]">
-              <CalendarIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Select 
-                value={selectedMeetingId.toString()} 
-                onValueChange={(val) => setSelectedMeetingId(Number(val))}
-              >
-                <SelectTrigger className="pl-9 h-11 rounded-xl bg-background border-border shadow-sm">
-                  <SelectValue placeholder="Selecione uma reunião" />
-                </SelectTrigger>
-                <SelectContent>
-                  {meetings?.map(m => (
-                    <SelectItem key={m.id} value={m.id.toString()}>
-                      {format(new Date(m.date + 'T12:00:00'), "dd 'de' MMMM, yyyy", { locale: ptBR })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="bg-card border border-border/50 rounded-2xl p-4 md:p-6 shadow-sm space-y-4">
+          <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
+            <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-semibold text-muted-foreground ml-1">Setor da Reunião</Label>
+                <Select value={meetingSectorFilter} onValueChange={setMeetingSectorFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px] h-11 rounded-xl bg-background shadow-sm">
+                    <SelectValue placeholder="Filtrar Reuniões" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as Reuniões</SelectItem>
+                    {sectors?.map(s => (
+                      <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-2 flex-1 min-w-[240px]">
+                <Label className="text-xs font-semibold text-muted-foreground ml-1">Data/Nome da Reunião</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <CalendarIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Select 
+                      value={selectedMeetingId.toString()} 
+                      onValueChange={(val) => setSelectedMeetingId(Number(val))}
+                    >
+                      <SelectTrigger className="pl-9 h-11 rounded-xl bg-background border-border shadow-sm">
+                        <SelectValue placeholder="Selecione uma reunião" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredMeetings.map(m => (
+                          <SelectItem key={m.id} value={m.id.toString()}>
+                            {m.name ? `${m.name} (${format(new Date(m.date + 'T12:00:00'), "dd/MM/yyyy")})` : format(new Date(m.date + 'T12:00:00'), "dd 'de' MMMM, yyyy", { locale: ptBR })}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-11 w-11 rounded-xl"
+                    onClick={() => setIsEditingMeeting(true)}
+                    disabled={selectedMeetingId === ""}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
-            
-            <div className="relative w-full sm:w-[240px]">
+
+            <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto self-end">
+              <Button 
+                onClick={handleMarkAllPresent}
+                disabled={isLocked || filteredInstructors.length === 0}
+                variant="outline" 
+                className="w-full xl:w-auto h-11 rounded-xl font-semibold border-primary/20 text-primary hover:bg-primary hover:text-white"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Marcar visíveis como Presente
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 pt-2 border-t">
+            <div className="relative w-full sm:w-[300px]">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar por nome..." 
+                placeholder="Buscar instrutor..." 
                 className="pl-9 h-11 rounded-xl bg-background shadow-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
 
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-semibold text-muted-foreground mr-1">Filtrar Instrutores:</span>
               {sectors?.map(s => (
                 <Button
                   key={s.id}
@@ -210,16 +288,6 @@ export default function CheckIn() {
               )}
             </div>
           </div>
-
-          <Button 
-            onClick={handleMarkAllPresent}
-            disabled={isLocked || filteredInstructors.length === 0}
-            variant="outline" 
-            className="w-full xl:w-auto h-11 rounded-xl font-semibold border-primary/20 text-primary hover:bg-primary hover:text-white"
-          >
-            <CheckCircle2 className="w-4 h-4 mr-2" />
-            Marcar visíveis como Presente
-          </Button>
         </div>
 
         {/* Lock Warning Removed - Editing Always Enabled */}
@@ -324,6 +392,55 @@ export default function CheckIn() {
           )}
         </div>
       </div>
+
+      {/* Edit Meeting Dialog */}
+      <Dialog open={isEditingMeeting} onOpenChange={setIsEditingMeeting}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Reunião</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome da Reunião (Opcional)</Label>
+              <Input 
+                placeholder="Ex: Treinamento Ginástica Geral" 
+                value={editMeetingName}
+                onChange={(e) => setEditMeetingName(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Setor Responsável</Label>
+              <Select 
+                value={editMeetingSectorId?.toString() || "none"} 
+                onValueChange={(val) => setEditMeetingSectorId(val === "none" ? null : Number(val))}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Selecione um setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {sectors?.map(s => (
+                    <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditingMeeting(false)} className="rounded-xl">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleUpdateMeeting} 
+              className="rounded-xl"
+              disabled={updateMeetingMutation.isPending}
+            >
+              {updateMeetingMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Floating Action Bar */}
       {hasChanges && !isLocked && (
