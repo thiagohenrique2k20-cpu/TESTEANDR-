@@ -15,21 +15,37 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+import { useSectors } from "@/hooks/use-sectors";
+
 export default function Reports() {
   const { data: instructors, isLoading: loadInst } = useInstructors();
   const { data: attendances, isLoading: loadAtt } = useAttendances();
   const { data: meetings, isLoading: loadMeet } = useMeetings();
   const { data: settings, isLoading: loadSet } = useSettings();
+  const { data: sectors, isLoading: loadSec } = useSectors();
 
   const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
+  const [meetingSectorFilter, setMeetingSectorFilter] = useState<string>("all");
 
   const minAttendance = settings?.minimumAttendance || 80;
 
+  const filteredMeetings = useMemo(() => {
+    if (!meetings) return [];
+    if (meetingSectorFilter === "all") return meetings;
+    return meetings.filter(m => m.sectorId?.toString() === meetingSectorFilter);
+  }, [meetings, meetingSectorFilter]);
+
+  const filteredAttendances = useMemo(() => {
+    if (!attendances || !filteredMeetings) return [];
+    const meetingIds = new Set(filteredMeetings.map(m => m.id));
+    return attendances.filter(a => meetingIds.has(a.meetingId));
+  }, [attendances, filteredMeetings]);
+
   const stats = useMemo(() => {
-    if (!instructors || !attendances) return [];
+    if (!instructors || !filteredAttendances) return [];
 
     return instructors.map(inst => {
-      const instAtts = attendances.filter(a => a.instructorId === inst.id);
+      const instAtts = filteredAttendances.filter(a => a.instructorId === inst.id);
       const present = instAtts.filter(a => a.status === 'present').length;
       const absent = instAtts.filter(a => a.status === 'absent').length;
       const justified = instAtts.filter(a => a.status === 'justified').length;
@@ -51,17 +67,17 @@ export default function Reports() {
         percentage
       };
     }).sort((a, b) => b.percentage - a.percentage || b.present - a.present);
-  }, [instructors, attendances]);
+  }, [instructors, filteredAttendances]);
 
   const selectedInstructorStats = useMemo(() => {
-    if (!selectedInstructorId || !stats || !attendances || !meetings) return null;
+    if (!selectedInstructorId || !stats || !filteredAttendances || !filteredMeetings) return null;
     const instructor = instructors?.find(i => i.id === selectedInstructorId);
     const instStats = stats.find(s => s.id === selectedInstructorId);
     if (!instructor || !instStats) return null;
 
-    const instAtts = attendances.filter(a => a.instructorId === selectedInstructorId);
+    const instAtts = filteredAttendances.filter(a => a.instructorId === selectedInstructorId);
     const history = instAtts.map(a => {
-      const meeting = meetings.find(m => m.id === a.meetingId);
+      const meeting = filteredMeetings.find(m => m.id === a.meetingId);
       return {
         date: meeting?.date || "",
         status: a.status,
@@ -73,23 +89,23 @@ export default function Reports() {
       { name: 'Presente', value: instStats.present, fill: '#16a34a' },
       { name: 'Ausente', value: instStats.absent, fill: '#dc2626' },
       { name: 'Justificado', value: instStats.justified, fill: '#f59e0b' },
-      { name: 'N/A', value: instStats.na, fill: '#64748b' },
+      { name: 'Não Obrigatório', value: instStats.na, fill: '#64748b' },
     ].filter(d => d.value > 0);
 
     return { instructor, instStats, history, pieData };
-  }, [selectedInstructorId, stats, attendances, meetings, instructors]);
+  }, [selectedInstructorId, stats, filteredAttendances, filteredMeetings, instructors]);
 
   // Aggregate by Month for Trend Chart
   const monthlyData = useMemo(() => {
-    if (!meetings || !attendances) return [];
+    if (!filteredMeetings || !filteredAttendances) return [];
     
     const groups: Record<string, { present: number, total: number }> = {};
     
-    meetings.forEach(m => {
+    filteredMeetings.forEach(m => {
       const month = format(parseISO(m.date), "MMM/yyyy", { locale: ptBR });
       if (!groups[month]) groups[month] = { present: 0, total: 0 };
       
-      const mAtts = attendances.filter(a => a.meetingId === m.id && (a.status === 'present' || a.status === 'absent'));
+      const mAtts = filteredAttendances.filter(a => a.meetingId === m.id && (a.status === 'present' || a.status === 'absent'));
       groups[month].present += mAtts.filter(a => a.status === 'present').length;
       groups[month].total += mAtts.length;
     });
@@ -98,9 +114,9 @@ export default function Reports() {
       name,
       presenca: data.total > 0 ? Math.round((data.present / data.total) * 100) : 0
     }));
-  }, [meetings, attendances]);
+  }, [filteredMeetings, filteredAttendances]);
 
-  if (loadInst || loadAtt || loadMeet || loadSet) {
+  if (loadInst || loadAtt || loadMeet || loadSet || loadSec) {
     return <div className="p-8 space-y-6"><Skeleton className="h-64 w-full" /><Skeleton className="h-96 w-full" /></div>;
   }
 
@@ -115,22 +131,41 @@ export default function Reports() {
           title="Painel de Relatórios" 
           description="Acompanhe os indicadores de engajamento e assiduidade global."
         />
-        <div className="w-full sm:w-64">
-          <Select 
-            value={selectedInstructorId?.toString() || "all"} 
-            onValueChange={(val) => setSelectedInstructorId(val === "all" ? null : Number(val))}
-          >
-            <SelectTrigger className="rounded-xl">
-              <User className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Relatório Individual" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Visão Geral</SelectItem>
-              {instructors?.map(i => (
-                <SelectItem key={i.id} value={i.id.toString()}>{i.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+          <div className="w-full sm:w-64">
+            <Select 
+              value={meetingSectorFilter} 
+              onValueChange={setMeetingSectorFilter}
+            >
+              <SelectTrigger className="rounded-xl">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Tipo de Reunião" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Reuniões</SelectItem>
+                {sectors?.map(s => (
+                  <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-full sm:w-64">
+            <Select 
+              value={selectedInstructorId?.toString() || "all"} 
+              onValueChange={(val) => setSelectedInstructorId(val === "all" ? null : Number(val))}
+            >
+              <SelectTrigger className="rounded-xl">
+                <User className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Relatório Individual" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Visão Geral</SelectItem>
+                {instructors?.map(i => (
+                  <SelectItem key={i.id} value={i.id.toString()}>{i.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -365,7 +400,7 @@ export default function Reports() {
                           }>
                             {h.status === 'present' ? 'Presente' :
                              h.status === 'absent' ? 'Ausente' :
-                             h.status === 'justified' ? 'Justificou' : 'N/A'}
+                             h.status === 'justified' ? 'Justificou' : 'Não Obrigatório'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{h.observation || "-"}</TableCell>
