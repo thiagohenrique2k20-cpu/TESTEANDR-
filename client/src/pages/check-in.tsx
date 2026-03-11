@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar as CalendarIcon, CheckCircle2, Search, Filter, AlertCircle, Info, Edit2, Plus } from "lucide-react";
+import { Calendar as CalendarIcon, CheckCircle2, Search, Filter, AlertCircle, Info, Edit2 } from "lucide-react";
 import { useInstructors } from "@/hooks/use-instructors";
 import { useMeetings, useUpdateMeeting } from "@/hooks/use-meetings";
 import { useAttendances, useBulkUpdateAttendances } from "@/hooks/use-attendances";
@@ -367,8 +367,7 @@ export default function CheckIn() {
                               : 'bg-slate-50 text-slate-700 border-slate-100 hover:bg-slate-100 hover:border-slate-200'
                             }`}
                           >
-                            <span className="hidden sm:inline text-xs">Não Obrigatório</span>
-                            <span className="sm:hidden">N/O</span>
+                            N/A
                           </Button>
                         </div>
                         
@@ -411,24 +410,7 @@ export default function CheckIn() {
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Setor Responsável</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6 px-2 text-xs text-primary"
-                  onClick={() => {
-                    const name = prompt("Nome do novo setor:");
-                    if (name) {
-                      // We don't have a direct sector mutation hook here, but we can use the one from sectors page if needed
-                      // For simplicity in Fast Mode, let's assume the user can add via the sectors page or we provide a quick link
-                      window.location.href = "/sectors";
-                    }
-                  }}
-                >
-                  <Plus className="w-3 h-3 mr-1" /> Novo Setor
-                </Button>
-              </div>
+              <Label>Setor Responsável</Label>
               <Select 
                 value={editMeetingSectorId?.toString() || "none"} 
                 onValueChange={(val) => setEditMeetingSectorId(val === "none" ? null : Number(val))}
