@@ -143,6 +143,20 @@ export async function registerRoutes(
     res.json(meetings);
   });
 
+  app.patch(api.meetings.update.path, async (req, res) => {
+    try {
+      const input = api.meetings.update.input.parse(req.body);
+      const meeting = await storage.updateMeeting(Number(req.params.id), input);
+      if (!meeting) return res.status(404).json({ message: "Meeting not found" });
+      res.json(meeting);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      }
+      throw err;
+    }
+  });
+
   // Attendances
   app.get(api.attendances.list.path, async (req, res) => {
     const attendances = await storage.getAttendances();
