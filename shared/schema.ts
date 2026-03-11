@@ -23,9 +23,7 @@ export const instructorSectors = pgTable("instructor_sectors", {
 
 export const meetings = pgTable("meetings", {
   id: serial("id").primaryKey(),
-  name: text("name"), // Optional custom name
   date: date("date").notNull(), // YYYY-MM-DD
-  sectorId: integer("sector_id").references(() => sectors.id, { onDelete: 'set null' }), // Associated sector
 });
 
 export const attendances = pgTable("attendances", {
@@ -49,7 +47,6 @@ export const instructorsRelations = relations(instructors, ({ many }) => ({
 
 export const sectorsRelations = relations(sectors, ({ many }) => ({
   instructors: many(instructorSectors),
-  meetings: many(meetings),
 }));
 
 export const instructorSectorsRelations = relations(instructorSectors, ({ one }) => ({
@@ -63,12 +60,8 @@ export const instructorSectorsRelations = relations(instructorSectors, ({ one })
   }),
 }));
 
-export const meetingsRelations = relations(meetings, ({ one, many }) => ({
+export const meetingsRelations = relations(meetings, ({ many }) => ({
   attendances: many(attendances),
-  sector: one(sectors, {
-    fields: [meetings.sectorId],
-    references: [sectors.id],
-  }),
 }));
 
 export const attendancesRelations = relations(attendances, ({ one }) => ({
@@ -95,10 +88,6 @@ export type Meeting = typeof meetings.$inferSelect;
 export type Attendance = typeof attendances.$inferSelect;
 export type Setting = typeof settings.$inferSelect;
 
-export type MeetingWithSector = Meeting & {
-  sector?: Sector | null;
-};
-
 export type InstructorWithSectors = Instructor & {
   sectors: { sector: Sector }[];
 };
@@ -113,8 +102,6 @@ export type UpdateInstructorRequest = Partial<CreateInstructorRequest>;
 
 export type CreateSectorRequest = z.infer<typeof insertSectorSchema>;
 export type UpdateSectorRequest = Partial<CreateSectorRequest>;
-
-export type UpdateMeetingRequest = Partial<z.infer<typeof insertMeetingSchema>>;
 
 export type BulkUpdateAttendanceRequest = {
   attendances: {

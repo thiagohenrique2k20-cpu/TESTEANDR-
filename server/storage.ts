@@ -19,10 +19,9 @@ export interface IStorage {
   updateSector(id: number, data: UpdateSectorRequest): Promise<Sector>;
   deleteSector(id: number): Promise<void>;
 
-  getMeetings(): Promise<MeetingWithSector[]>;
-  getMeeting(id: number): Promise<MeetingWithSector | undefined>;
-  createMeeting(date: string, name?: string, sectorId?: number): Promise<Meeting>;
-  updateMeeting(id: number, data: UpdateMeetingRequest): Promise<MeetingWithSector | undefined>;
+  getMeetings(): Promise<Meeting[]>;
+  getMeeting(id: number): Promise<Meeting | undefined>;
+  createMeeting(date: string): Promise<Meeting>;
 
   getAttendances(): Promise<Attendance[]>;
   getAttendancesByMeeting(meetingId: number): Promise<Attendance[]>;
@@ -118,28 +117,18 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sectors).where(eq(sectors.id, id));
   }
 
-  async getMeetings(): Promise<MeetingWithSector[]> {
-    return await db.query.meetings.findMany({
-      with: { sector: true },
-      orderBy: (meetings, { asc }) => [asc(meetings.date)]
-    });
+  async getMeetings(): Promise<Meeting[]> {
+    return await db.select().from(meetings).orderBy(meetings.date);
   }
 
-  async getMeeting(id: number): Promise<MeetingWithSector | undefined> {
-    return await db.query.meetings.findFirst({
-      where: eq(meetings.id, id),
-      with: { sector: true }
-    });
-  }
-
-  async createMeeting(date: string, name?: string, sectorId?: number): Promise<Meeting> {
-    const [meeting] = await db.insert(meetings).values({ date, name, sectorId }).returning();
+  async getMeeting(id: number): Promise<Meeting | undefined> {
+    const [meeting] = await db.select().from(meetings).where(eq(meetings.id, id));
     return meeting;
   }
 
-  async updateMeeting(id: number, data: UpdateMeetingRequest): Promise<MeetingWithSector | undefined> {
-    await db.update(meetings).set(data).where(eq(meetings.id, id));
-    return await this.getMeeting(id);
+  async createMeeting(date: string): Promise<Meeting> {
+    const [meeting] = await db.insert(meetings).values({ date }).returning();
+    return meeting;
   }
 
   async getAttendances(): Promise<Attendance[]> {
