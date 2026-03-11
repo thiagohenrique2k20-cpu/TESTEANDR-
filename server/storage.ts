@@ -1,9 +1,10 @@
 import { db } from "./db";
 import {
-  instructors, sectors, instructorSectors, meetings, attendances, settings,
-  type Instructor, type Sector, type Meeting, type Attendance, type Setting,
+  instructors, sectors, meetingTypes, instructorSectors, meetings, attendances, settings,
+  type Instructor, type Sector, type MeetingType, type Meeting, type Attendance, type Setting,
   type CreateInstructorRequest, type UpdateInstructorRequest, type InstructorWithSectors,
-  type CreateSectorRequest, type UpdateSectorRequest, type BulkUpdateAttendanceRequest
+  type CreateSectorRequest, type UpdateSectorRequest, type CreateMeetingTypeRequest,
+  type MeetingWithSector, type UpdateMeetingRequest, type BulkUpdateAttendanceRequest
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -18,6 +19,10 @@ export interface IStorage {
   createSector(data: CreateSectorRequest): Promise<Sector>;
   updateSector(id: number, data: UpdateSectorRequest): Promise<Sector>;
   deleteSector(id: number): Promise<void>;
+
+  getMeetingTypes(): Promise<MeetingType[]>;
+  createMeetingType(data: CreateMeetingTypeRequest): Promise<MeetingType>;
+  deleteMeetingType(id: number): Promise<void>;
 
   getMeetings(): Promise<MeetingWithSector[]>;
   getMeeting(id: number): Promise<MeetingWithSector | undefined>;
@@ -37,9 +42,7 @@ export class DatabaseStorage implements IStorage {
     return await db.query.instructors.findMany({
       with: {
         sectors: {
-          with: {
-            sector: true
-          }
+          with: { sector: true }
         }
       },
       orderBy: (instructors, { asc }) => [asc(instructors.name)]
@@ -51,9 +54,7 @@ export class DatabaseStorage implements IStorage {
       where: eq(instructors.id, id),
       with: {
         sectors: {
-          with: {
-            sector: true
-          }
+          with: { sector: true }
         }
       }
     });
@@ -118,9 +119,22 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sectors).where(eq(sectors.id, id));
   }
 
+  async getMeetingTypes(): Promise<MeetingType[]> {
+    return await db.select().from(meetingTypes).orderBy(meetingTypes.name);
+  }
+
+  async createMeetingType(data: CreateMeetingTypeRequest): Promise<MeetingType> {
+    const [mt] = await db.insert(meetingTypes).values(data).returning();
+    return mt;
+  }
+
+  async deleteMeetingType(id: number): Promise<void> {
+    await db.delete(meetingTypes).where(eq(meetingTypes.id, id));
+  }
+
   async getMeetings(): Promise<MeetingWithSector[]> {
     return await db.query.meetings.findMany({
-      with: { sector: true },
+      with: { sector: true, meetingType: true },
       orderBy: (meetings, { asc }) => [asc(meetings.date)]
     });
   }
@@ -128,7 +142,7 @@ export class DatabaseStorage implements IStorage {
   async getMeeting(id: number): Promise<MeetingWithSector | undefined> {
     return await db.query.meetings.findFirst({
       where: eq(meetings.id, id),
-      with: { sector: true }
+      with: { sector: true, meetingType: true }
     });
   }
 

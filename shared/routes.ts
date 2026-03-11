@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertInstructorSchema, insertSectorSchema, insertSettingSchema } from './schema';
+import { insertInstructorSchema, insertSectorSchema, insertSettingSchema, insertMeetingTypeSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({ message: z.string(), field: z.string().optional() }),
@@ -61,6 +61,24 @@ export const api = {
       responses: { 204: z.void(), 404: errorSchemas.notFound },
     },
   },
+  meetingTypes: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/meeting-types' as const,
+      responses: { 200: z.any() },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/meeting-types' as const,
+      input: insertMeetingTypeSchema,
+      responses: { 201: z.any(), 400: errorSchemas.validation },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/meeting-types/:id' as const,
+      responses: { 204: z.void() },
+    },
+  },
   meetings: {
     list: {
       method: 'GET' as const,
@@ -74,6 +92,7 @@ export const api = {
         name: z.string().optional().nullable(),
         date: z.string().optional(),
         sectorId: z.number().optional().nullable(),
+        meetingTypeId: z.number().optional().nullable(),
       }),
       responses: { 200: z.any(), 400: errorSchemas.validation, 404: errorSchemas.notFound },
     },

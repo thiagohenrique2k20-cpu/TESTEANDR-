@@ -14,6 +14,11 @@ export const sectors = pgTable("sectors", {
   name: text("name").notNull(),
 });
 
+export const meetingTypes = pgTable("meeting_types", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+});
+
 export const instructorSectors = pgTable("instructor_sectors", {
   instructorId: integer("instructor_id").notNull().references(() => instructors.id, { onDelete: 'cascade' }),
   sectorId: integer("sector_id").notNull().references(() => sectors.id, { onDelete: 'cascade' }),
@@ -23,9 +28,10 @@ export const instructorSectors = pgTable("instructor_sectors", {
 
 export const meetings = pgTable("meetings", {
   id: serial("id").primaryKey(),
-  name: text("name"), // Optional custom name
-  date: date("date").notNull(), // YYYY-MM-DD
-  sectorId: integer("sector_id").references(() => sectors.id, { onDelete: 'set null' }), // Associated sector
+  name: text("name"),
+  date: date("date").notNull(),
+  sectorId: integer("sector_id").references(() => sectors.id, { onDelete: 'set null' }),
+  meetingTypeId: integer("meeting_type_id").references(() => meetingTypes.id, { onDelete: 'set null' }),
 });
 
 export const attendances = pgTable("attendances", {
@@ -52,6 +58,10 @@ export const sectorsRelations = relations(sectors, ({ many }) => ({
   meetings: many(meetings),
 }));
 
+export const meetingTypesRelations = relations(meetingTypes, ({ many }) => ({
+  meetings: many(meetings),
+}));
+
 export const instructorSectorsRelations = relations(instructorSectors, ({ one }) => ({
   instructor: one(instructors, {
     fields: [instructorSectors.instructorId],
@@ -69,6 +79,10 @@ export const meetingsRelations = relations(meetings, ({ one, many }) => ({
     fields: [meetings.sectorId],
     references: [sectors.id],
   }),
+  meetingType: one(meetingTypes, {
+    fields: [meetings.meetingTypeId],
+    references: [meetingTypes.id],
+  }),
 }));
 
 export const attendancesRelations = relations(attendances, ({ one }) => ({
@@ -84,12 +98,14 @@ export const attendancesRelations = relations(attendances, ({ one }) => ({
 
 export const insertInstructorSchema = createInsertSchema(instructors).omit({ id: true });
 export const insertSectorSchema = createInsertSchema(sectors).omit({ id: true });
+export const insertMeetingTypeSchema = createInsertSchema(meetingTypes).omit({ id: true });
 export const insertMeetingSchema = createInsertSchema(meetings).omit({ id: true });
 export const insertAttendanceSchema = createInsertSchema(attendances).omit({ id: true, updatedAt: true });
 export const insertSettingSchema = createInsertSchema(settings).omit({ id: true });
 
 export type Instructor = typeof instructors.$inferSelect;
 export type Sector = typeof sectors.$inferSelect;
+export type MeetingType = typeof meetingTypes.$inferSelect;
 export type InstructorSector = typeof instructorSectors.$inferSelect;
 export type Meeting = typeof meetings.$inferSelect;
 export type Attendance = typeof attendances.$inferSelect;
@@ -97,6 +113,7 @@ export type Setting = typeof settings.$inferSelect;
 
 export type MeetingWithSector = Meeting & {
   sector?: Sector | null;
+  meetingType?: MeetingType | null;
 };
 
 export type InstructorWithSectors = Instructor & {
@@ -113,6 +130,8 @@ export type UpdateInstructorRequest = Partial<CreateInstructorRequest>;
 
 export type CreateSectorRequest = z.infer<typeof insertSectorSchema>;
 export type UpdateSectorRequest = Partial<CreateSectorRequest>;
+
+export type CreateMeetingTypeRequest = z.infer<typeof insertMeetingTypeSchema>;
 
 export type UpdateMeetingRequest = Partial<z.infer<typeof insertMeetingSchema>>;
 

@@ -7,6 +7,8 @@ import { useInstructors } from "@/hooks/use-instructors";
 import { useAttendances } from "@/hooks/use-attendances";
 import { useMeetings } from "@/hooks/use-meetings";
 import { useSettings } from "@/hooks/use-settings";
+import { useSectors } from "@/hooks/use-sectors";
+import { useMeetingTypes } from "@/hooks/use-meeting-types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,27 +17,66 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+function statusLabel(status: string) {
+  switch (status) {
+    case 'present': return 'Presente';
+    case 'absent': return 'Ausente';
+    case 'justified': return 'Justificado';
+    case 'na': return 'Não obrigatório';
+    default: return status;
+  }
+}
+
 export default function Reports() {
   const { data: instructors, isLoading: loadInst } = useInstructors();
   const { data: attendances, isLoading: loadAtt } = useAttendances();
   const { data: meetings, isLoading: loadMeet } = useMeetings();
   const { data: settings, isLoading: loadSet } = useSettings();
+  const { data: sectors, isLoading: loadSec } = useSectors();
+  const { data: meetingTypes, isLoading: loadTypes } = useMeetingTypes();
 
   const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
+  const [meetingTypeFilters, setMeetingTypeFilters] = useState<string[]>([]);
+  const [sectorFilters, setSectorFilters] = useState<string[]>([]);
 
   const minAttendance = settings?.minimumAttendance || 80;
+
+  const toggleMeetingTypeFilter = (id: string) => {
+    setMeetingTypeFilters(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const toggleSectorFilter = (id: string) => {
+    setSectorFilters(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  // Filter meetings by meeting type
+  const filteredMeetingIds = useMemo(() => {
+    if (!meetings) return new Set<number>();
+    let list = meetings;
+    if (meetingTypeFilters.length > 0) {
+      list = list.filter(m => m.meetingTypeId && meetingTypeFilters.includes(m.meetingTypeId.toString()));
+    }
+    return new Set(list.map(m => m.id));
+  }, [meetings, meetingTypeFilters]);
 
   const stats = useMemo(() => {
     if (!instructors || !attendances) return [];
 
-    return instructors.map(inst => {
-      const instAtts = attendances.filter(a => a.instructorId === inst.id);
+    let instList = instructors;
+    if (sectorFilters.length > 0) {
+      instList = instList.filter(i => i.sectors.some(s => sectorFilters.includes(s.sector.id.toString())));
+    }
+
+    return instList.map(inst => {
+      const instAtts = attendances.filter(a =>
+        a.instructorId === inst.id &&
+        (meetingTypeFilters.length === 0 || filteredMeetingIds.has(a.meetingId))
+      );
       const present = instAtts.filter(a => a.status === 'present').length;
       const absent = instAtts.filter(a => a.status === 'absent').length;
       const justified = instAtts.filter(a => a.status === 'justified').length;
       const na = instAtts.filter(a => a.status === 'na').length;
-      
-      const validForCalc = present + absent; 
+
+      const validForCalc = present + absent;
       const percentage = validForCalc > 0 ? Math.round((present / validForCalc) * 100) : 100;
       const totalApplicable = present + absent + justified;
 
@@ -43,6 +84,7 @@ export default function Reports() {
         id: inst.id,
         name: inst.name,
         sectors: inst.sectors.map(s => s.sector.name).join(", "),
+        sectorIds: inst.sectors.map(s => s.sector.id.toString()),
         present,
         absent,
         justified,
@@ -51,7 +93,7 @@ export default function Reports() {
         percentage
       };
     }).sort((a, b) => b.percentage - a.percentage || b.present - a.present);
-  }, [instructors, attendances]);
+  }, [instructors, attendances, filteredMeetingIds, meetingTypeFilters, sectorFilters]);
 
   const selectedInstructorStats = useMemo(() => {
     if (!selectedInstructorId || !stats || !attendances || !meetings) return null;
@@ -59,11 +101,16 @@ export default function Reports() {
     const instStats = stats.find(s => s.id === selectedInstructorId);
     if (!instructor || !instStats) return null;
 
-    const instAtts = attendances.filter(a => a.instructorId === selectedInstructorId);
+    const instAtts = attendances.filter(a =>
+      a.instructorId === selectedInstructorId &&
+      (meetingTypeFilters.length === 0 || filteredMeetingIds.has(a.meetingId))
+    );
     const history = instAtts.map(a => {
       const meeting = meetings.find(m => m.id === a.meetingId);
       return {
         date: meeting?.date || "",
+        meetingName: meeting?.name || null,
+        meetingType: meeting?.meetingType?.name || null,
         status: a.status,
         observation: a.observation
       };
@@ -73,54 +120,58 @@ export default function Reports() {
       { name: 'Presente', value: instStats.present, fill: '#16a34a' },
       { name: 'Ausente', value: instStats.absent, fill: '#dc2626' },
       { name: 'Justificado', value: instStats.justified, fill: '#f59e0b' },
-      { name: 'N/A', value: instStats.na, fill: '#64748b' },
+      { name: 'Não obrigatório', value: instStats.na, fill: '#64748b' },
     ].filter(d => d.value > 0);
 
     return { instructor, instStats, history, pieData };
-  }, [selectedInstructorId, stats, attendances, meetings, instructors]);
+  }, [selectedInstructorId, stats, attendances, meetings, instructors, meetingTypeFilters, filteredMeetingIds]);
 
-  // Aggregate by Month for Trend Chart
   const monthlyData = useMemo(() => {
     if (!meetings || !attendances) return [];
-    
     const groups: Record<string, { present: number, total: number }> = {};
-    
-    meetings.forEach(m => {
-      const month = format(parseISO(m.date), "MMM/yyyy", { locale: ptBR });
-      if (!groups[month]) groups[month] = { present: 0, total: 0 };
-      
-      const mAtts = attendances.filter(a => a.meetingId === m.id && (a.status === 'present' || a.status === 'absent'));
-      groups[month].present += mAtts.filter(a => a.status === 'present').length;
-      groups[month].total += mAtts.length;
-    });
+
+    meetings
+      .filter(m => meetingTypeFilters.length === 0 || filteredMeetingIds.has(m.id))
+      .forEach(m => {
+        const month = format(parseISO(m.date), "MMM/yyyy", { locale: ptBR });
+        if (!groups[month]) groups[month] = { present: 0, total: 0 };
+
+        const mAtts = attendances.filter(a => a.meetingId === m.id && (a.status === 'present' || a.status === 'absent'));
+        groups[month].present += mAtts.filter(a => a.status === 'present').length;
+        groups[month].total += mAtts.length;
+      });
 
     return Object.entries(groups).map(([name, data]) => ({
       name,
       presenca: data.total > 0 ? Math.round((data.present / data.total) * 100) : 0
     }));
-  }, [meetings, attendances]);
+  }, [meetings, attendances, filteredMeetingIds, meetingTypeFilters]);
 
-  if (loadInst || loadAtt || loadMeet || loadSet) {
+  if (loadInst || loadAtt || loadMeet || loadSet || loadSec || loadTypes) {
     return <div className="p-8 space-y-6"><Skeleton className="h-64 w-full" /><Skeleton className="h-96 w-full" /></div>;
   }
 
-  const overallAvg = stats.length > 0 
+  const overallAvg = stats.length > 0
     ? Math.round(stats.reduce((acc, curr) => acc + curr.percentage, 0) / stats.length)
     : 0;
 
+  const filteredMeetingCount = meetingTypeFilters.length > 0
+    ? meetings?.filter(m => filteredMeetingIds.has(m.id)).length || 0
+    : meetings?.length || 0;
+
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <PageHeader 
-          title="Painel de Relatórios" 
+        <PageHeader
+          title="Painel de Relatórios"
           description="Acompanhe os indicadores de engajamento e assiduidade global."
         />
         <div className="w-full sm:w-64">
-          <Select 
-            value={selectedInstructorId?.toString() || "all"} 
+          <Select
+            value={selectedInstructorId?.toString() || "all"}
             onValueChange={(val) => setSelectedInstructorId(val === "all" ? null : Number(val))}
           >
-            <SelectTrigger className="rounded-xl">
+            <SelectTrigger className="rounded-xl" data-testid="select-individual-report">
               <User className="w-4 h-4 mr-2" />
               <SelectValue placeholder="Relatório Individual" />
             </SelectTrigger>
@@ -134,18 +185,76 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* Filters Panel */}
+      <div className="bg-card border border-border/50 rounded-2xl p-4 shadow-sm space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground">Filtros dos Relatórios</p>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-medium text-muted-foreground w-full sm:w-auto shrink-0">Tipo de Reunião:</span>
+            {meetingTypes?.map(t => (
+              <Button
+                key={t.id}
+                variant={meetingTypeFilters.includes(t.id.toString()) ? "default" : "outline"}
+                size="sm"
+                className="rounded-full h-8 px-3 text-xs"
+                onClick={() => toggleMeetingTypeFilter(t.id.toString())}
+                data-testid={`button-filter-meeting-type-${t.id}`}
+              >
+                {t.name}
+              </Button>
+            ))}
+            {meetingTypeFilters.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => setMeetingTypeFilters([])}
+                data-testid="button-clear-type-filters"
+              >
+                Limpar
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-medium text-muted-foreground w-full sm:w-auto shrink-0">Setor do Instrutor:</span>
+            {sectors?.map(s => (
+              <Button
+                key={s.id}
+                variant={sectorFilters.includes(s.id.toString()) ? "default" : "outline"}
+                size="sm"
+                className="rounded-full h-8 px-3 text-xs"
+                onClick={() => toggleSectorFilter(s.id.toString())}
+                data-testid={`button-filter-report-sector-${s.id}`}
+              >
+                {s.name}
+              </Button>
+            ))}
+            {sectorFilters.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => setSectorFilters([])}
+                data-testid="button-clear-sector-filters"
+              >
+                Limpar
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {!selectedInstructorId ? (
         <>
           {/* Top Metrics */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Existing metric cards... */}
             <Card className="rounded-2xl border-border/50 shadow-sm bg-gradient-to-br from-card to-primary/5">
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-primary/10 rounded-xl text-primary"><Activity className="w-6 h-6" /></div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Assiduidade Geral</p>
-                    <h3 className="text-3xl font-display font-bold text-foreground">{overallAvg}%</h3>
+                    <h3 className="text-3xl font-display font-bold text-foreground" data-testid="text-overall-avg">{overallAvg}%</h3>
                   </div>
                 </div>
               </CardContent>
@@ -155,7 +264,7 @@ export default function Reports() {
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-green-500/10 rounded-xl text-green-600"><Trophy className="w-6 h-6" /></div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Meta Configuradada</p>
+                    <p className="text-sm font-medium text-muted-foreground">Meta Configurada</p>
                     <h3 className="text-3xl font-display font-bold text-foreground">{minAttendance}%</h3>
                   </div>
                 </div>
@@ -179,14 +288,13 @@ export default function Reports() {
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-blue-500/10 rounded-xl text-blue-600"><TrendingUp className="w-6 h-6" /></div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Total de Reuniões</p>
-                    <h3 className="text-3xl font-display font-bold text-foreground">{meetings?.length || 0}</h3>
+                    <p className="text-sm font-medium text-muted-foreground">Reuniões Filtradas</p>
+                    <h3 className="text-3xl font-display font-bold text-foreground">{filteredMeetingCount}</h3>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
-          {/* ... trend chart and ranking table ... */}
 
           {/* Trend Chart */}
           <div className="grid lg:grid-cols-3 gap-6">
@@ -201,7 +309,7 @@ export default function Reports() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} domain={[0, 100]} />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                       formatter={(val: number) => [`${val}%`, 'Presença']}
                     />
@@ -241,6 +349,7 @@ export default function Reports() {
             </Card>
           </div>
 
+          {/* Global Ranking */}
           <Card className="rounded-2xl border-border/50 shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -257,7 +366,8 @@ export default function Reports() {
                     <TableHead className="text-center font-semibold">Taxa (%)</TableHead>
                     <TableHead className="text-center font-semibold">Presente</TableHead>
                     <TableHead className="text-center font-semibold">Ausente</TableHead>
-                    <TableHead className="text-center font-semibold hidden sm:table-cell">Justificou</TableHead>
+                    <TableHead className="text-center font-semibold hidden sm:table-cell">Justificado</TableHead>
+                    <TableHead className="text-center font-semibold hidden sm:table-cell">Não obrigatório</TableHead>
                     <TableHead className="text-center font-semibold">Ação</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -265,7 +375,7 @@ export default function Reports() {
                   {stats.map(row => {
                     const isBelow = row.percentage < minAttendance;
                     return (
-                      <TableRow key={row.id} className="border-border/50 hover:bg-muted/20">
+                      <TableRow key={row.id} className="border-border/50 hover:bg-muted/20" data-testid={`row-ranking-${row.id}`}>
                         <TableCell className="font-medium text-foreground py-4">
                           <div className="flex items-center gap-2">
                             {isBelow && <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />}
@@ -278,11 +388,12 @@ export default function Reports() {
                             {row.percentage}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center font-medium text-green-600">{row.present}</TableCell>
+                        <TableCell className="text-center font-medium text-green-600" data-testid={`text-present-${row.id}`}>{row.present}</TableCell>
                         <TableCell className="text-center font-medium text-red-600">{row.absent}</TableCell>
                         <TableCell className="text-center font-medium text-amber-600 hidden sm:table-cell">{row.justified}</TableCell>
+                        <TableCell className="text-center font-medium text-slate-500 hidden sm:table-cell">{row.na}</TableCell>
                         <TableCell className="text-center">
-                          <Button variant="ghost" size="sm" onClick={() => setSelectedInstructorId(row.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedInstructorId(row.id)} data-testid={`button-view-instructor-${row.id}`}>
                             Ver <ChevronRight className="w-4 h-4 ml-1" />
                           </Button>
                         </TableCell>
@@ -297,7 +408,7 @@ export default function Reports() {
       ) : selectedInstructorStats && (
         <div className="space-y-6">
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" onClick={() => setSelectedInstructorId(null)}>
+            <Button variant="outline" size="sm" onClick={() => setSelectedInstructorId(null)} data-testid="button-back-overview">
               Voltar para Visão Geral
             </Button>
             <h2 className="text-2xl font-bold">{selectedInstructorStats.instructor.name}</h2>
@@ -349,6 +460,7 @@ export default function Reports() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
+                      <TableHead>Reunião</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Observação</TableHead>
                     </TableRow>
@@ -356,16 +468,17 @@ export default function Reports() {
                   <TableBody>
                     {selectedInstructorStats.history.map((h, i) => (
                       <TableRow key={i}>
-                        <TableCell>{format(new Date(h.date + 'T12:00:00'), "dd/MM/yyyy")}</TableCell>
+                        <TableCell className="whitespace-nowrap">{format(new Date(h.date + 'T12:00:00'), "dd/MM/yyyy")}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {h.meetingName || (h.meetingType ? h.meetingType : "-")}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={
                             h.status === 'present' ? 'default' :
                             h.status === 'absent' ? 'destructive' :
                             'secondary'
-                          }>
-                            {h.status === 'present' ? 'Presente' :
-                             h.status === 'absent' ? 'Ausente' :
-                             h.status === 'justified' ? 'Justificou' : 'N/A'}
+                          } className={h.status === 'present' ? 'bg-green-100 text-green-800' : ''}>
+                            {statusLabel(h.status)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{h.observation || "-"}</TableCell>

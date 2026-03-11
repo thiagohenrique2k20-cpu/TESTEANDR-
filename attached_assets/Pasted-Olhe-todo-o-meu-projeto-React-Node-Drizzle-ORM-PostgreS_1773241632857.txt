@@ -1,0 +1,17 @@
+Olhe todo o meu projeto React + Node + Drizzle ORM + PostgreSQL.
+Primeiro preciso travar a conexão com o banco de dados para garantir que o projeto sempre use o banco de produção e nunca utilize o banco temporário do Replit.
+No arquivo server/db.ts, adicione uma verificação no topo do arquivo para impedir que o aplicativo inicie caso a variável de ambiente DATABASE_URL não esteja definida. Caso ela não exista, o sistema deve mostrar um erro claro no console explicando que o banco de produção não está configurado e encerrar o processo com process.exit(1). O objetivo é evitar que o sistema utilize qualquer banco temporário do Replit e prevenir perda de dados.
+Depois disso, garanta que a conexão do Drizzle ORM utilize exclusivamente process.env.DATABASE_URL para criar o Pool do PostgreSQL. Não deve existir nenhum fallback ou conexão automática com banco temporário do Replit.
+Não altere mais nada relacionado ao funcionamento do dashboard, apenas proteja a conexão com o banco.
+Agora preciso adicionar um novo conceito no sistema chamado Tipo de Reunião. Esse campo é diferente do Setor da Reunião, que já existe e deve continuar funcionando normalmente.
+Os tipos de reunião iniciais devem ser: Ginastica, Bike, Musculação, Tecnologia e Comunicação.
+Também deve existir uma opção para adicionar um novo tipo de reunião.
+Na tela onde é possível editar Data/Nome da Reunião, adicione também o campo Tipo da Reunião como um dropdown. Esse dropdown deve permitir escolher um dos tipos existentes e também permitir criar um novo tipo.
+Depois disso, preciso adicionar novos filtros na aba Relatórios.
+Os relatórios devem permitir filtrar por Tipo de Reunião da mesma forma visual que já acontece na aba de Check-in, utilizando botões ou tags de filtro.
+Também preciso adicionar filtro por Setor do Instrutor, exatamente igual ao filtro de instrutores existente na aba Check-in.
+Esses dois filtros devem funcionar juntos nos relatórios, permitindo filtrar simultaneamente por Tipo de Reunião e por Setor do Instrutor.
+Também preciso fazer duas alterações de texto no sistema: Substituir o status “N/A” por “Não obrigatório”. Substituir o status “Justificou” por “Justificado”.
+Na aba Relatórios, dentro da seção Ranking Global, adicionar uma nova coluna chamada “Não obrigatório”, que deve contabilizar quantas vezes um instrutor recebeu esse status nas reuniões.
+Também incluir nos relatórios filtros por Tipo de Reunião e por Setor do Instrutor, seguindo exatamente o mesmo padrão visual já usado na aba Check-in (botões estilo tag para filtros).
+Não alterar o layout existente do dashboard, não modificar as abas atuais e não mudar o funcionamento do sistema de check-in. Apenas adicionar os novos campos, filtros e proteções do banco de dados mantendo todo o restante do sistema como está.

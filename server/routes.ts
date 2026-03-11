@@ -27,18 +27,17 @@ async function seedDatabase() {
     for (const d of dates) {
       await storage.createMeeting(d);
     }
-    
-    // Seed some initial data
+
     const s1 = await storage.createSector({ name: "Engenharia" });
     const s2 = await storage.createSector({ name: "Design" });
-    
+
     const i1 = await storage.createInstructor({ name: "João Silva", active: true, sectorIds: [s1.id] });
     const i2 = await storage.createInstructor({ name: "Maria Santos", active: true, sectorIds: [s1.id, s2.id] });
     const i3 = await storage.createInstructor({ name: "Carlos Gomes", active: true, sectorIds: [s2.id] });
-    
+
     const meetingsList = await storage.getMeetings();
     const pastMeeting = meetingsList[0];
-    
+
     await storage.bulkUpdateAttendances(pastMeeting.id, {
       attendances: [
         { instructorId: i1.id, status: 'present' },
@@ -47,13 +46,21 @@ async function seedDatabase() {
       ]
     });
   }
+
+  // Seed meeting types if none exist
+  const existingTypes = await storage.getMeetingTypes();
+  if (existingTypes.length === 0) {
+    const initialTypes = ['Ginastica', 'Bike', 'Musculação', 'Tecnologia', 'Comunicação'];
+    for (const name of initialTypes) {
+      await storage.createMeetingType({ name });
+    }
+  }
 }
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Call seed database
   seedDatabase().catch(console.error);
 
   // Instructors
@@ -134,6 +141,30 @@ export async function registerRoutes(
 
   app.delete(api.sectors.delete.path, async (req, res) => {
     await storage.deleteSector(Number(req.params.id));
+    res.status(204).end();
+  });
+
+  // Meeting Types
+  app.get(api.meetingTypes.list.path, async (req, res) => {
+    const types = await storage.getMeetingTypes();
+    res.json(types);
+  });
+
+  app.post(api.meetingTypes.create.path, async (req, res) => {
+    try {
+      const input = api.meetingTypes.create.input.parse(req.body);
+      const type = await storage.createMeetingType(input);
+      res.status(201).json(type);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.meetingTypes.delete.path, async (req, res) => {
+    await storage.deleteMeetingType(Number(req.params.id));
     res.status(204).end();
   });
 
